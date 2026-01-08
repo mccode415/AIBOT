@@ -6,3 +6,7 @@ tensorflow
 keras
 pynput
 h5py
+
+# Costco Shopping Agent dependencies
+playwright>=1.40.0
+asyncio
