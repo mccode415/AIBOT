@@ -36,7 +36,18 @@ const SELECTORS = {
 
   // General
   modalClose: '.modal-close, .close-button, [aria-label="Close"]',
-  errorMessage: '.error-message, .alert-error'
+  errorMessage: '.error-message, .alert-error',
+
+  // Loading/Wait screens
+  loadingSpinner: '.loading, .spinner, .loader, [class*="loading"], [class*="spinner"]',
+  loadingOverlay: '.overlay, .loading-overlay, [class*="overlay"]',
+  skeleton: '[class*="skeleton"], [class*="placeholder"]',
+  progressBar: '[role="progressbar"], .progress',
+
+  // CAPTCHA selectors (common patterns)
+  captchaFrame: 'iframe[src*="captcha"], iframe[src*="recaptcha"], iframe[src*="hcaptcha"]',
+  captchaContainer: '.g-recaptcha, .h-captcha, [class*="captcha"]',
+  captchaChallenge: '#captcha, [id*="captcha"]'
 };
 
 const URLS = {
@@ -111,12 +122,295 @@ class CostcoAgent {
     }
   }
 
-  async navigate(url) {
+  /**
+   * Wait for loading screens to disappear
+   * @param {number} timeout - Max time to wait in ms
+   * @returns {Promise<{success: boolean, waited: boolean}>}
+   */
+  async waitForLoadingScreens(timeout = 30000) {
+    const startTime = Date.now();
+    let waited = false;
+
+    try {
+      // Wait for spinners to disappear
+      const spinner = this.page.locator(SELECTORS.loadingSpinner);
+      if (await spinner.count() > 0) {
+        waited = true;
+        await spinner.first().waitFor({ state: 'hidden', timeout });
+      }
+
+      // Wait for overlays to disappear
+      const overlay = this.page.locator(SELECTORS.loadingOverlay);
+      if (await overlay.count() > 0) {
+        const remainingTime = timeout - (Date.now() - startTime);
+        if (remainingTime > 0) {
+          waited = true;
+          await overlay.first().waitFor({ state: 'hidden', timeout: remainingTime });
+        }
+      }
+
+      // Wait for skeleton loaders
+      const skeleton = this.page.locator(SELECTORS.skeleton);
+      if (await skeleton.count() > 0) {
+        const remainingTime = timeout - (Date.now() - startTime);
+        if (remainingTime > 0) {
+          waited = true;
+          await skeleton.first().waitFor({ state: 'hidden', timeout: remainingTime });
+        }
+      }
+
+      return { success: true, waited };
+    } catch (error) {
+      // Timeout waiting - might be stuck
+      return { success: false, waited, error: error.message };
+    }
+  }
+
+  /**
+   * Check if a CAPTCHA is present on the page
+   * @returns {Promise<{detected: boolean, type: string|null}>}
+   */
+  async detectCaptcha() {
+    try {
+      // Check for reCAPTCHA iframe
+      const recaptchaFrame = this.page.locator('iframe[src*="recaptcha"]');
+      if (await recaptchaFrame.count() > 0) {
+        return { detected: true, type: 'recaptcha' };
+      }
+
+      // Check for hCaptcha iframe
+      const hcaptchaFrame = this.page.locator('iframe[src*="hcaptcha"]');
+      if (await hcaptchaFrame.count() > 0) {
+        return { detected: true, type: 'hcaptcha' };
+      }
+
+      // Check for generic captcha container
+      const captchaContainer = this.page.locator(SELECTORS.captchaContainer);
+      if (await captchaContainer.count() > 0) {
+        return { detected: true, type: 'generic' };
+      }
+
+      // Check for captcha in page content
+      const pageContent = await this.page.content();
+      if (pageContent.toLowerCase().includes('captcha') ||
+          pageContent.includes('robot') ||
+          pageContent.includes('verify you are human')) {
+        return { detected: true, type: 'text-based' };
+      }
+
+      return { detected: false, type: null };
+    } catch (error) {
+      return { detected: false, type: null, error: error.message };
+    }
+  }
+
+  /**
+   * Handle CAPTCHA - pause for manual solving or use service
+   * @param {Object} options - Captcha handling options
+   * @returns {Promise<{success: boolean, method: string}>}
+   */
+  async handleCaptcha(options = {}) {
+    const {
+      manualTimeout = 120000,  // 2 minutes for manual solving
+      onCaptchaDetected = null, // Callback when captcha detected
+      solverService = null,     // Optional: '2captcha', 'anticaptcha'
+      solverApiKey = null       // API key for solver service
+    } = options;
+
+    const captchaStatus = await this.detectCaptcha();
+
+    if (!captchaStatus.detected) {
+      return { success: true, method: 'none', message: 'No CAPTCHA detected' };
+    }
+
+    await this.takeScreenshot('captcha_detected');
+
+    // Notify callback if provided
+    if (onCaptchaDetected) {
+      onCaptchaDetected({ type: captchaStatus.type });
+    }
+
+    // Option 1: Use external solver service
+    if (solverService && solverApiKey) {
+      try {
+        const result = await this.solveCaptchaWithService(
+          captchaStatus.type,
+          solverService,
+          solverApiKey
+        );
+        return result;
+      } catch (error) {
+        console.log('Solver service failed, falling back to manual');
+      }
+    }
+
+    // Option 2: Wait for manual solving
+    console.log(`⚠️ CAPTCHA detected (${captchaStatus.type}). Please solve it manually.`);
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < manualTimeout) {
+      await this.page.waitForTimeout(2000);
+
+      const stillPresent = await this.detectCaptcha();
+      if (!stillPresent.detected) {
+        return { success: true, method: 'manual', message: 'CAPTCHA solved manually' };
+      }
+    }
+
+    return {
+      success: false,
+      method: 'timeout',
+      message: 'CAPTCHA solving timed out'
+    };
+  }
+
+  /**
+   * Solve CAPTCHA using external service (2Captcha, Anti-Captcha, etc.)
+   * @param {string} captchaType - Type of captcha
+   * @param {string} service - Service name
+   * @param {string} apiKey - API key
+   * @returns {Promise<{success: boolean}>}
+   */
+  async solveCaptchaWithService(captchaType, service, apiKey) {
+    // Get site key from page
+    let siteKey = null;
+
+    if (captchaType === 'recaptcha') {
+      const container = await this.page.$('.g-recaptcha');
+      if (container) {
+        siteKey = await container.getAttribute('data-sitekey');
+      }
+    } else if (captchaType === 'hcaptcha') {
+      const container = await this.page.$('.h-captcha');
+      if (container) {
+        siteKey = await container.getAttribute('data-sitekey');
+      }
+    }
+
+    if (!siteKey) {
+      return { success: false, error: 'Could not find site key' };
+    }
+
+    const pageUrl = this.page.url();
+
+    // Call solver service API
+    if (service === '2captcha') {
+      return await this.solve2Captcha(siteKey, pageUrl, apiKey, captchaType);
+    } else if (service === 'anticaptcha') {
+      return await this.solveAntiCaptcha(siteKey, pageUrl, apiKey, captchaType);
+    }
+
+    return { success: false, error: 'Unknown solver service' };
+  }
+
+  /**
+   * Solve using 2Captcha service
+   */
+  async solve2Captcha(siteKey, pageUrl, apiKey, captchaType) {
+    const fetch = (await import('node-fetch')).default;
+
+    // Submit task
+    const method = captchaType === 'hcaptcha' ? 'hcaptcha' : 'userrecaptcha';
+    const submitUrl = `http://2captcha.com/in.php?key=${apiKey}&method=${method}&googlekey=${siteKey}&pageurl=${pageUrl}&json=1`;
+
+    const submitResponse = await fetch(submitUrl);
+    const submitData = await submitResponse.json();
+
+    if (submitData.status !== 1) {
+      return { success: false, error: submitData.request };
+    }
+
+    const taskId = submitData.request;
+
+    // Poll for result (max 2 minutes)
+    for (let i = 0; i < 24; i++) {
+      await this.page.waitForTimeout(5000);
+
+      const resultUrl = `http://2captcha.com/res.php?key=${apiKey}&action=get&id=${taskId}&json=1`;
+      const resultResponse = await fetch(resultUrl);
+      const resultData = await resultResponse.json();
+
+      if (resultData.status === 1) {
+        // Inject solution
+        await this.injectCaptchaSolution(resultData.request, captchaType);
+        return { success: true, method: '2captcha' };
+      }
+    }
+
+    return { success: false, error: 'Solver timeout' };
+  }
+
+  /**
+   * Inject CAPTCHA solution into page
+   */
+  async injectCaptchaSolution(token, captchaType) {
+    if (captchaType === 'recaptcha') {
+      await this.page.evaluate((token) => {
+        document.querySelector('#g-recaptcha-response').value = token;
+        document.querySelector('[name="g-recaptcha-response"]').value = token;
+        // Trigger callback if exists
+        if (typeof window.captchaCallback === 'function') {
+          window.captchaCallback(token);
+        }
+      }, token);
+    } else if (captchaType === 'hcaptcha') {
+      await this.page.evaluate((token) => {
+        document.querySelector('[name="h-captcha-response"]').value = token;
+        document.querySelector('[name="g-recaptcha-response"]').value = token;
+      }, token);
+    }
+  }
+
+  /**
+   * Smart wait - handles loading screens and checks for CAPTCHA
+   * @param {Object} options
+   * @returns {Promise<{success: boolean}>}
+   */
+  async smartWait(options = {}) {
+    const {
+      timeout = 30000,
+      checkCaptcha = true,
+      onCaptchaDetected = null
+    } = options;
+
+    // First wait for network to settle
+    try {
+      await this.page.waitForLoadState('networkidle', { timeout: timeout / 2 });
+    } catch (e) {
+      // Network didn't settle, continue anyway
+    }
+
+    // Wait for loading screens
+    await this.waitForLoadingScreens(timeout / 2);
+
+    // Check for CAPTCHA
+    if (checkCaptcha) {
+      const captchaStatus = await this.detectCaptcha();
+      if (captchaStatus.detected) {
+        return await this.handleCaptcha({ onCaptchaDetected });
+      }
+    }
+
+    return { success: true };
+  }
+
+  async navigate(url, options = {}) {
     try {
       await this.page.goto(url);
-      await this.page.waitForLoadState('networkidle');
       await this.closeModals();
-      return { success: true };
+
+      // Use smart wait to handle loading screens and CAPTCHAs
+      const waitResult = await this.smartWait({
+        timeout: options.timeout || 30000,
+        checkCaptcha: options.checkCaptcha !== false,
+        onCaptchaDetected: options.onCaptchaDetected
+      });
+
+      if (!waitResult.success && waitResult.method === 'timeout') {
+        return { success: false, error: 'CAPTCHA timeout', captcha: true };
+      }
+
+      return { success: true, captchaSolved: waitResult.method === 'manual' };
     } catch (error) {
       await this.takeScreenshot('navigate_error');
       return { success: false, error: error.message };

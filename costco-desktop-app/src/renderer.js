@@ -43,7 +43,8 @@ function addLog(type, content, data = null) {
     action: '⚡',
     result: '✅',
     error: '❌',
-    info: 'ℹ️'
+    info: 'ℹ️',
+    captcha: '🔐'
   };
 
   const entry = document.createElement('div');

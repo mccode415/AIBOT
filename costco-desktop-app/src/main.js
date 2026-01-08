@@ -111,7 +111,12 @@ ipcMain.handle('agent:screenshot', async () => {
 // Shopping workflow handler
 ipcMain.handle('agent:shop', async (event, options) => {
   if (!agent) {
-    agent = new CostcoAgent({ headless: options.headless });
+    agent = new CostcoAgent({
+      headless: options.headless,
+      // CAPTCHA solver config (optional)
+      captchaSolver: options.captchaSolver || null,
+      captchaApiKey: options.captchaApiKey || null
+    });
     await agent.start();
   }
 
@@ -121,11 +126,32 @@ ipcMain.handle('agent:shop', async (event, options) => {
     results.push({ type, content, data });
   };
 
+  // Callback when CAPTCHA is detected
+  const onCaptchaDetected = (captchaInfo) => {
+    sendUpdate('captcha', `CAPTCHA detected (${captchaInfo.type}). Please solve it in the browser window.`, captchaInfo);
+  };
+
   try {
     // Login (skip if browse-only)
     if (!options.browseOnly) {
       sendUpdate('thinking', 'Logging into Costco...');
       const loginResult = await agent.login(options.email, options.password);
+
+      // Check if CAPTCHA blocked login
+      if (loginResult.captcha) {
+        sendUpdate('captcha', 'CAPTCHA appeared during login. Please solve it manually.');
+        const captchaResult = await agent.handleCaptcha({
+          onCaptchaDetected,
+          solverService: options.captchaSolver,
+          solverApiKey: options.captchaApiKey
+        });
+        if (!captchaResult.success) {
+          sendUpdate('error', 'CAPTCHA solving failed or timed out');
+          return { success: false, results };
+        }
+        sendUpdate('result', 'CAPTCHA solved!');
+      }
+
       if (!loginResult.success) {
         sendUpdate('error', `Login failed: ${loginResult.error}`);
         return { success: false, results };
