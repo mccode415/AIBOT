@@ -1,6 +1,27 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification } = require('electron');
 const path = require('path');
 const CostcoAgent = require('./agent');
+
+// Show desktop notification
+function showNotification(title, body, urgent = false) {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title,
+      body,
+      urgency: urgent ? 'critical' : 'normal',
+      silent: false
+    });
+    notification.show();
+
+    // Click notification to focus window
+    notification.on('click', () => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+  }
+}
 
 let mainWindow;
 let agent = null;
@@ -129,6 +150,19 @@ ipcMain.handle('agent:shop', async (event, options) => {
   // Callback when CAPTCHA is detected
   const onCaptchaDetected = (captchaInfo) => {
     sendUpdate('captcha', `CAPTCHA detected (${captchaInfo.type}). Please solve it in the browser window.`, captchaInfo);
+
+    // Show desktop notification
+    showNotification(
+      '🔐 CAPTCHA Required',
+      'Please solve the CAPTCHA in the browser window to continue.',
+      true // urgent
+    );
+
+    // Bring browser window to front if possible
+    mainWindow.webContents.send('agent:update', {
+      type: 'info',
+      content: 'Waiting for you to solve the CAPTCHA...'
+    });
   };
 
   try {

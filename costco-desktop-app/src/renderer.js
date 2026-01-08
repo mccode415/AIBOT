@@ -36,6 +36,46 @@ function init() {
   window.api.onAgentUpdate(handleAgentUpdate);
 }
 
+// Play alert sound for CAPTCHA
+function playAlertSound() {
+  // Create audio context and play a beep
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800; // Hz
+    oscillator.type = 'sine';
+    gainNode.gain.value = 0.3;
+
+    oscillator.start();
+
+    // Beep pattern: beep-beep-beep
+    setTimeout(() => oscillator.stop(), 150);
+    setTimeout(() => {
+      const osc2 = audioContext.createOscillator();
+      osc2.connect(gainNode);
+      osc2.frequency.value = 800;
+      osc2.type = 'sine';
+      osc2.start();
+      setTimeout(() => osc2.stop(), 150);
+    }, 200);
+    setTimeout(() => {
+      const osc3 = audioContext.createOscillator();
+      osc3.connect(gainNode);
+      osc3.frequency.value = 1000;
+      osc3.type = 'sine';
+      osc3.start();
+      setTimeout(() => osc3.stop(), 300);
+    }, 400);
+  } catch (e) {
+    console.log('Could not play sound:', e);
+  }
+}
+
 // Add log entry
 function addLog(type, content, data = null) {
   const icons = {
@@ -46,6 +86,11 @@ function addLog(type, content, data = null) {
     info: 'ℹ️',
     captcha: '🔐'
   };
+
+  // Play sound for CAPTCHA
+  if (type === 'captcha') {
+    playAlertSound();
+  }
 
   const entry = document.createElement('div');
   entry.className = `log-entry ${type}`;
