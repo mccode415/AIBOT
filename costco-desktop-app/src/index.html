@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Costco Shopping Agent</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 30px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 30px;
+    }
+
+    header h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      color: #888;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 25px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .card h2 {
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #aaa;
+      font-size: 0.9em;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      font-size: 1em;
+    }
+
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .checkbox-group input {
+      width: auto;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(76, 175, 80, 0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .activity-log {
+      max-height: 400px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      padding: 15px;
+    }
+
+    .log-entry {
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .log-entry.thinking { background: rgba(33, 150, 243, 0.2); }
+    .log-entry.action { background: rgba(255, 152, 0, 0.2); }
+    .log-entry.result { background: rgba(76, 175, 80, 0.2); }
+    .log-entry.error { background: rgba(244, 67, 54, 0.2); }
+
+    .log-icon {
+      font-size: 1.2em;
+    }
+
+    .log-content {
+      flex: 1;
+    }
+
+    .products-grid {
+      display: grid;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .product-item {
+      background: rgba(255,255,255,0.05);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .product-title {
+      font-weight: 500;
+      margin-bottom: 5px;
+    }
+
+    .product-price {
+      color: #4CAF50;
+      font-weight: bold;
+    }
+
+    .status-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.8);
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #888;
+    }
+
+    .status-dot.active {
+      background: #4CAF50;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🛒 Costco Shopping Agent</h1>
+      <p>AI-powered shopping automation for Costco.com</p>
+    </header>
+
+    <div class="main-grid">
+      <!-- Left Column: Controls -->
+      <div class="card">
+        <h2>📝 Shopping List</h2>
+
+        <div class="form-group">
+          <label for="items">Items to search (one per line)</label>
+          <textarea id="items" placeholder="kirkland olive oil&#10;toilet paper&#10;paper towels"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="promo">Promo Code (optional)</label>
+          <input type="text" id="promo" placeholder="SAVE10">
+        </div>
+
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="browseOnly" checked>
+          <label for="browseOnly">Browse-only mode (no login required)</label>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="headless">
+          <label for="headless">Run browser in background (headless)</label>
+        </div>
+
+        <!-- Credentials (shown when browse-only is unchecked) -->
+        <div id="credentialsSection" class="hidden">
+          <div class="form-group">
+            <label for="email">Costco Email</label>
+            <input type="email" id="email" placeholder="your@email.com">
+          </div>
+          <div class="form-group">
+            <label for="password">Costco Password</label>
+            <input type="password" id="password" placeholder="••••••••">
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" id="startBtn">
+            🚀 Start Shopping
+          </button>
+          <button class="btn btn-secondary" id="stopBtn" disabled>
+            ⏹️ Stop
+          </button>
+          <button class="btn btn-secondary" id="clearBtn">
+            🗑️ Clear Log
+          </button>
+        </div>
+      </div>
+
+      <!-- Right Column: Activity Log -->
+      <div class="card">
+        <h2>📊 Activity Log</h2>
+        <div class="activity-log" id="activityLog">
+          <div class="log-entry result">
+            <span class="log-icon">ℹ️</span>
+            <span class="log-content">Ready to start. Enter items and click "Start Shopping".</span>
+          </div>
+        </div>
+
+        <!-- Products Section -->
+        <div id="productsSection" class="hidden">
+          <h3 style="margin-top: 20px; margin-bottom: 10px;">🏷️ Found Products</h3>
+          <div class="products-grid" id="productsGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-indicator">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Ready</span>
+    </div>
+    <span id="versionInfo">v1.0.0</span>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
