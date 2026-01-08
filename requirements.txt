@@ -9,4 +9,4 @@ h5py
 
 # Costco Shopping Agent dependencies
 playwright>=1.40.0
-asyncio
+streamlit>=1.28.0

@@ -63,7 +63,8 @@ async def run_shopping(
     items: List[str],
     promo_code: Optional[str] = None,
     auto_checkout: bool = False,
-    headless: bool = False
+    headless: bool = False,
+    browse_only: bool = False
 ):
     """
     Run the shopping agent with specified items.
@@ -73,27 +74,31 @@ async def run_shopping(
         promo_code: Optional promo code to apply
         auto_checkout: Whether to proceed to checkout automatically
         headless: Run browser in headless mode
+        browse_only: Just search/browse, don't login or add to cart
     """
     # Set headless mode
     os.environ["HEADLESS"] = str(headless).lower()
 
     config = CostcoConfig.from_env()
 
-    if not config.email or not config.password:
+    if not browse_only and (not config.email or not config.password):
         print_message("error", "Credentials not configured!")
         print("\nPlease set environment variables:")
         print("  export COSTCO_EMAIL='your_email@example.com'")
         print("  export COSTCO_PASSWORD='your_password'")
+        print("\nOr use --browse for browse-only mode (no login needed)")
         return
 
     print(f"\n📋 Shopping list: {', '.join(items)}")
     if promo_code:
         print(f"🏷️  Promo code: {promo_code}")
-    print(f"💳 Auto-checkout: {'Yes' if auto_checkout else 'No'}")
+    print(f"🔍 Mode: {'Browse-only' if browse_only else 'Full shopping'}")
+    if not browse_only:
+        print(f"💳 Auto-checkout: {'Yes' if auto_checkout else 'No'}")
     print("-" * 50)
 
     try:
-        async with CostcoShoppingAgent(config) as agent:
+        async with CostcoShoppingAgent(config, browse_only=browse_only) as agent:
             async for message in agent.shop(
                 items=items,
                 promo_code=promo_code,
@@ -247,8 +252,9 @@ def main():
 Examples:
   %(prog)s --items "kirkland olive oil" "paper towels"
   %(prog)s --items "toilet paper" --promo "SAVE10"
+  %(prog)s --browse --items "coffee"        # Browse-only (no login)
+  %(prog)s --gui                            # Launch web GUI
   %(prog)s --interactive
-  %(prog)s --items "coffee" --checkout --headless
 
 Environment Variables:
   COSTCO_EMAIL     Your Costco account email
@@ -277,6 +283,16 @@ Environment Variables:
         help="Run browser in headless mode"
     )
     parser.add_argument(
+        "--browse", "-b",
+        action="store_true",
+        help="Browse-only mode: search products without logging in"
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch the Streamlit web GUI"
+    )
+    parser.add_argument(
         "--interactive",
         action="store_true",
         help="Run in interactive mode"
@@ -286,18 +302,24 @@ Environment Variables:
 
     print_banner()
 
-    if args.interactive:
+    if args.gui:
+        import subprocess
+        print("🚀 Launching Streamlit GUI...")
+        print("   Open http://localhost:8501 in your browser")
+        subprocess.run(["streamlit", "run", "costco_app.py"])
+    elif args.interactive:
         asyncio.run(run_interactive())
     elif args.items:
         asyncio.run(run_shopping(
             items=args.items,
             promo_code=args.promo,
             auto_checkout=args.checkout,
-            headless=args.headless
+            headless=args.headless,
+            browse_only=args.browse
         ))
     else:
         parser.print_help()
-        print("\n⚠️  Please specify --items or --interactive")
+        print("\n⚠️  Please specify --items, --gui, or --interactive")
 
 
 if __name__ == "__main__":

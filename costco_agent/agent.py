@@ -48,13 +48,17 @@ class CostcoShoppingAgent:
 
         async with agent:
             result = await agent.shop(["kirkland olive oil", "toilet paper"])
+
+        # Browse-only mode (no login needed, just search/view products):
+        agent = CostcoShoppingAgent(browse_only=True)
     """
 
-    def __init__(self, config: Optional[CostcoConfig] = None):
+    def __init__(self, config: Optional[CostcoConfig] = None, browse_only: bool = False):
         self.config = config or CostcoConfig.from_env()
         self.browser: Optional[CostcoBrowser] = None
         self.tools: Optional[CostcoTools] = None
         self._is_running = False
+        self._browse_only = browse_only  # Skip login, just search/browse
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -120,20 +124,23 @@ class CostcoShoppingAgent:
             )
             return
 
-        # Step 1: Login
-        yield AgentMessage(type="thinking", content="Logging into Costco...")
-        login_result = await self.execute_tool("costco_login", {})
-        login_data = json.loads(login_result["content"][0]["text"])
+        # Step 1: Login (skip if browse_only mode)
+        if self._browse_only:
+            yield AgentMessage(type="result", content="Browse-only mode: skipping login")
+        else:
+            yield AgentMessage(type="thinking", content="Logging into Costco...")
+            login_result = await self.execute_tool("costco_login", {})
+            login_data = json.loads(login_result["content"][0]["text"])
 
-        if not login_data.get("success"):
-            yield AgentMessage(
-                type="error",
-                content=f"Login failed: {login_data.get('error', 'Unknown error')}",
-                data=login_data
-            )
-            return
+            if not login_data.get("success"):
+                yield AgentMessage(
+                    type="error",
+                    content=f"Login failed: {login_data.get('error', 'Unknown error')}",
+                    data=login_data
+                )
+                return
 
-        yield AgentMessage(type="result", content="Successfully logged in", data=login_data)
+            yield AgentMessage(type="result", content="Successfully logged in", data=login_data)
 
         # Step 2: Search and add each item
         for item in items:
@@ -179,8 +186,13 @@ class CostcoShoppingAgent:
                 )
                 continue
 
-            # Add to cart
-            if view_data.get("can_add_to_cart"):
+            # Add to cart (skip if browse_only)
+            if self._browse_only:
+                yield AgentMessage(
+                    type="result",
+                    content=f"[Browse-only] Found: {first_product['title'][:50]}... ({first_product['price']})"
+                )
+            elif view_data.get("can_add_to_cart"):
                 yield AgentMessage(type="action", content="Adding to cart...")
                 add_result = await self.execute_tool("costco_add_to_cart", {"quantity": 1})
                 add_data = json.loads(add_result["content"][0]["text"])
@@ -203,7 +215,14 @@ class CostcoShoppingAgent:
                     content=f"Product cannot be added to cart (may be out of stock)"
                 )
 
-        # Step 3: View cart
+        # Step 3: View cart (skip if browse_only)
+        if self._browse_only:
+            yield AgentMessage(
+                type="result",
+                content="Browse-only mode complete! Products found above. Login to add to cart."
+            )
+            return
+
         yield AgentMessage(type="thinking", content="Viewing cart...")
         cart_result = await self.execute_tool("costco_view_cart", {})
         cart_data = json.loads(cart_result["content"][0]["text"])
