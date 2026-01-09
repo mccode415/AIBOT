@@ -1,0 +1,14 @@
+# Core dependencies for the Autonomous Purchasing Agent
+
+# AI/LLM
+anthropic>=0.39.0         # Claude API client with vision support
+
+# Browser Automation
+playwright>=1.40.0        # Modern browser automation
+
+# Utilities
+python-dotenv>=1.0.0      # Environment variable management
+
+# Optional: For enhanced features
+Pillow>=10.0.0            # Image processing
+aiohttp>=3.9.0            # Async HTTP requests
